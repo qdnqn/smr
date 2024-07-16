@@ -85,32 +85,56 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 	if obj.Exists() {
 		if obj.Diff(jsonStringFromRequest) {
 			err = obj.Update(format, jsonStringFromRequest)
+
+			if err != nil {
+				return httpcontract.ResponseImplementation{
+					HttpStatus:       200,
+					Explanation:      "failed to update object",
+					ErrorExplanation: err.Error(),
+					Error:            false,
+					Success:          true,
+				}, err
+			}
 		}
 	} else {
 		err = obj.Add(format, jsonStringFromRequest)
+
+		if err != nil {
+			return httpcontract.ResponseImplementation{
+				HttpStatus:       200,
+				Explanation:      "failed to add object",
+				ErrorExplanation: err.Error(),
+				Error:            false,
+				Success:          true,
+			}, err
+		}
 	}
 
 	if obj.ChangeDetected() || !obj.Exists() {
-		containersFromDefinition := reconcile.NewWatcher(*containersDefinition, implementation.Shared.Manager)
 		GroupIdentifier := fmt.Sprintf("%s.%s", containersDefinition.Meta.Group, containersDefinition.Meta.Name)
 
-		containersFromDefinition.Logger.Info("new containers object created",
-			zap.String("group", containersFromDefinition.Definition.Meta.Group),
-			zap.String("identifier", containersFromDefinition.Definition.Meta.Name),
-		)
+		containersFromDefinition := implementation.Shared.Watcher.Find(GroupIdentifier)
+
+		if containersFromDefinition == nil {
+			containersFromDefinition = reconcile.NewWatcher(*containersDefinition, implementation.Shared.Manager)
+			containersFromDefinition.Logger.Info("containers object created")
+
+			go reconcile.HandleTickerAndEvents(implementation.Shared, containersFromDefinition)
+		} else {
+			containersFromDefinition.Definition = *containersDefinition
+			containersFromDefinition.Logger.Info("containers object modified")
+		}
 
 		implementation.Shared.Watcher.AddOrUpdate(GroupIdentifier, containersFromDefinition)
-		go reconcile.HandleTickerAndEvents(implementation.Shared, containersFromDefinition)
-
 		reconcile.ReconcileContainer(implementation.Shared, containersFromDefinition)
 	} else {
 		return httpcontract.ResponseImplementation{
 			HttpStatus:       200,
-			Explanation:      "object is same as the one on the server",
+			Explanation:      "containers object is same as the one on the server",
 			ErrorExplanation: "",
 			Error:            false,
 			Success:          true,
-		}, errors.New("object is same on the server")
+		}, errors.New("containers object is same on the server")
 	}
 
 	return httpcontract.ResponseImplementation{
@@ -216,11 +240,22 @@ func (implementation *Implementation) Delete(jsonData []byte) (httpcontract.Resp
 		}, nil
 	}
 
-	obj.Remove(format)
+	_, err = obj.Remove(format)
+
+	if err != nil {
+		return httpcontract.ResponseImplementation{
+			HttpStatus:       500,
+			Explanation:      "object removal failed",
+			ErrorExplanation: err.Error(),
+			Error:            true,
+			Success:          false,
+		}, nil
+	}
 
 	GroupIdentifier := fmt.Sprintf("%s.%s", containersDefinition.Meta.Group, containersDefinition.Meta.Name)
+
+	implementation.Shared.Watcher.Find(GroupIdentifier).Syncing = true
 	implementation.Shared.Watcher.Find(GroupIdentifier).Cancel()
-	implementation.Shared.Watcher.Remove(GroupIdentifier)
 
 	for _, definition := range containersDefinition.Spec {
 		format = f.New("container", definition.Meta.Group, definition.Meta.Name, "object")

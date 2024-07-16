@@ -37,6 +37,7 @@ type Static struct {
 	NetworkMode            string
 	Privileged             bool
 	Readiness              []Readiness
+	Resources              []Resource
 	Definition             v1.Container
 }
 
@@ -50,7 +51,6 @@ type Runtime struct {
 	FirstObserved      bool
 	Ready              bool
 	Configuration      map[string]string
-	Resources          []Resource
 	Owner              Owner
 	ObjectDependencies []*f.Format
 }
@@ -72,7 +72,8 @@ type PortMappings struct {
 }
 
 type Resource struct {
-	Identifier string
+	Group      string
+	Name       string
 	Key        string
 	Data       map[string]string
 	MountPoint string
@@ -101,6 +102,32 @@ type Readiness struct {
 	Ctx        context.Context    `json:"-"`
 	Cancel     context.CancelFunc `json:"-"`
 }
+
+type ReadinessState struct {
+	State int8
+}
+
+// Dependency related
+
+type Dependency struct {
+	Name     string
+	Timeout  string
+	Ctx      context.Context
+	Function func() error
+	Cancel   context.CancelFunc
+}
+
+type DependencyState struct {
+	State int8
+}
+
+type Result struct {
+	Data string
+}
+
+const CHECKING = 0
+const SUCCESS = 1
+const FAILED = 2
 
 type ReadinessResult struct {
 	Data string

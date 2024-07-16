@@ -37,15 +37,25 @@ func Create() {
 					panic(err)
 				}
 
-				target := ""
+				target := "development"
 				if os.Getenv("ENVIRONMENT") != "" {
 					target = os.Getenv("ENVIRONMENT")
-				} else {
-					target = "development"
+				}
+
+				domain := "localhost"
+				if os.Getenv("DOMAIN") != "" {
+					domain = os.Getenv("DOMAIN")
+				}
+
+				externalIP := "127.0.0.1"
+				if os.Getenv("EXTERNALIP") != "" {
+					externalIP = os.Getenv("EXTERNALIP")
 				}
 
 				mgr.Config.Target = target
 				mgr.Config.Root = mgr.Config.Environment.PROJECTDIR
+				mgr.Config.Domain = domain
+				mgr.Config.ExternalIP = externalIP
 
 				err = startup.Save(mgr.Config, out)
 

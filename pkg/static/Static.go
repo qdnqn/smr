@@ -7,7 +7,6 @@ import (
 const ROOTDIR string = "smr"
 const CONFIGDIR string = "config"
 const PROJECT = "smr"
-const SMR_LOCAL_DOMAIN string = "docker.private"
 
 const SMR string = "smr"
 
@@ -20,6 +19,10 @@ var STRUCTURE = []string{
 }
 
 const SMR_ENDPOINT_NAME = "smr-agent"
+
+const SMR_AGENT_URL = "smr-agent.cluster.private:1443"
+const SMR_AGENT_DOMAIN = "smr-agent.cluster.private"
+const SMR_LOCAL_DOMAIN string = "cluster.private"
 
 //go:embed resources/git/version
 var SMR_VERSION string

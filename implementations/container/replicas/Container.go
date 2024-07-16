@@ -1,16 +1,13 @@
 package replicas
 
 import (
-	"errors"
 	"github.com/r3labs/diff/v3"
 	"github.com/simplecontainer/smr/implementations/container/container"
 	"github.com/simplecontainer/smr/implementations/container/shared"
 	"github.com/simplecontainer/smr/implementations/container/status"
 	"github.com/simplecontainer/smr/pkg/definitions/v1"
-	"github.com/simplecontainer/smr/pkg/f"
 	"github.com/simplecontainer/smr/pkg/logger"
 	"github.com/simplecontainer/smr/pkg/manager"
-	"github.com/simplecontainer/smr/pkg/objects"
 	"go.uber.org/zap"
 	"strings"
 )
@@ -49,34 +46,13 @@ func (replicas *Replicas) HandleContainer(shared *shared.Shared, mgr *manager.Ma
 			return []string{}, []string{}, err
 		}
 
-		for i, v := range containerObj.Runtime.Resources {
-			format := f.New("resource", containerObj.Static.Group, v.Identifier, v.Key)
-
-			obj := objects.New(shared.Client)
-			err = obj.Find(format)
-
-			if err != nil {
-				logger.Log.Error("failed to get resources for the container")
-			}
-
-			containerObj.Runtime.Resources[i].Data[v.Key] = obj.GetDefinitionString()
-		}
-
-		logger.Log.Info("retrieved resources for container", zap.String("container", name))
-
-		/*
-			Do all pre-checks here before rewriting container in the registry
-		*/
+		// Do pre-checks here before rewriting container in the registry
 
 		logger.Log.Info("checking if pre-check conditions ready before add/update container in registry", zap.String("container", name))
 		existingContainer := shared.Registry.Find(containerObj.Static.Group, name)
 
 		if existingContainer != nil {
 			logger.Log.Info("container already existing on the server", zap.String("container", name))
-
-			if existingContainer.Status.IfStateIs(status.STATUS_RECONCILING) {
-				return nil, nil, errors.New("container is in reconciliation process try again later")
-			}
 
 			var onlyReplicaChange = false
 

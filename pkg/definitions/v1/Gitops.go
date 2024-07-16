@@ -12,8 +12,8 @@ type Gitops struct {
 }
 
 type GitopsMeta struct {
-	Group      string `json:"group"`
-	Identifier string `json:"identifier"`
+	Group string `json:"group"`
+	Name  string `json:"name"`
 }
 
 type GitopsSpec struct {

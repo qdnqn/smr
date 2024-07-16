@@ -1,281 +1,193 @@
 Quick start
 ===========
 
-**Note: The project is in active development.**
+**Note: The project is not stable.**
 
-Last updated on  May 7, 2024
+This is a quick start tutorial for getting a simple container up and running.
 
-This is a quick start tutorial for getting a simple container manager up and running. Abbreviation is used as smr often.
+## Description
+A simple container manager is designed to ease life for the developers and DevOps engineers running containers on Docker.
 
-Requirements
-------------
+Introducing objects which can be defined as YAML definition and sent to the simplecontainer manager to produce Docker container via reconciliation:
 
-*   Go version 1.22
-*   Installed docker daemon on the environment
-*   Sudo privileges
+- Containers
+- Container
+- Configuration
+- Resource
+- Gitops
+- CertKey
+- HttpAuth
+
+These objects let you manage Docker containers with configure features:
+
+- Single Docker daemon only (Currently)
+- Integrated DNS server isolated from Docker daemon
+- GitOps: deploy objects from the GitOps repositories
+- Replication of containers
+- Reconciliation and tracking the lifecycle of the Docker containers
+- Operators to implement third-party functionalities
+- CLI client to interact with the simplecontainer manager
+- Fast learning curve - no over complication
+- Reliable dependency ordering and readiness probes
+- Templating of the container objects to leverage secrets and configuration
+
 
 Installation of the agent
 -------------------------
+To start using simple container first run it to generate cert.pem for client authentication.
 
-GitHub is used as the Git repository for the project. Currently, no release is made since the project is in active development.
+Note: This is example for the localhost. If domain is example.com running on the virtual machine with IP 1.2.3.4,
+just replace the DOMAIN and EXTERNALIP values.
 
-To build smr just run these commands:
+```bash
+docker run \
+       -e DOMAIN=localhost \
+       -e EXTERNALIP=127.0.0.1 \
+       -v $HOME/smr:/home/smr-agent/.ssh \
+       -it smr:latest
+```
 
-    git clone https://github.com/simplecontainer/smr
-    cd smr
-    ./scripts/build_docker.sh
-    ./scripts/run_docker_daemon.sh
+This will generate certs, keys and will print out cert.pem. Save it to some file.
 
-The smr relies on the docker and it acts as a wrapper around the Docker API.
+```azure
+{"level":"info","ts":1720689117.5965548,"caller":"mtls/Mtls.go:70","msg":"generating mtls ca, server certificate pem and client certificate pem"}
+Certificate is generated for the use by the smr client!
+Copy-paste it to safe location for further use - it will not be printed anymore in the logs
+-----BEGIN PRIVATE KEY-----
+MIIJQgIBADANBgkqhkiG9w0BAQEFAASCCSwwggkoAgEAAoICAQDygLkfhjuISYKe
+... 
+TRUNCATED OUTPUT FOR READABILITY
+```
+Afterward running will start simplecontainer as docker container and it will be able
+to manage containers on top of docker.
 
-Running next command will show that smr-agent is up and running.
-
-    docker ps
-    CONTAINER ID   IMAGE       COMMAND                  CREATED         STATUS         PORTS                      NAMES
-    e33a624da8d3   smr:0.0.1   "/bin/sh -c '/opt/sm…"   4 seconds ago   Up 4 seconds   127.0.0.1:8080->8080/tcp   smr-agent
-
-
-The smr-agent is up and running and is listening on the local interface only so no remote connection is possible at the moment.
-
-After starting smr-agent run docker logs smr-agent. This will print out certificate bundle needed for the authentication for the smr-client.
-
-💡
-
-The smr-agent is running as the docker container with super privileges to the /var/run/docker.sock to be able to manipulate docker daemon.
+```bash
+docker run \
+       -v $HOME/smr:/home/smr-agent/.ssh \
+       -v /tmp:/tmp \
+       -p 0.0.0.0:1443:1443 \
+       --dns 127.0.0.1 \
+       --name smr-agent \
+       -it smr:latest
+```
 
 Installation of the client
 --------------------------
 
-The client also can be cloned from GitHub and needs to be built and copied to the directory that is already in the $PATH variable.
+Client CLI is used for communication to the simplecontainer over network using mTLS. 
+It is secured by mutual verification and encryption.
 
-    git clone https://github.com/simplecontainer/smr-client
-    cd smr-client
-    go build
-    sudo cp smr /usr/local/bin/smr
+To install client just download it from releases:
 
-For example if the smr-agent is running on the same server as client then this will add the context to the smr CLI.
+https://github.com/simplecontainer/client/releases
 
-`cert.pem` can be copied from the logs of the smr-agent.
+Example:
 
-`--context` flag provides the option to name the context however you want.
-
-```
+```azure
+VERSION=v0.0.1
+PLATFORM=linux-amd64
+curl -o client https://github.com/simplecontainer/client/releases/download/$VERSION/client-$PLATFORM
+sudo mv client /usr/bin/smr
 smr context connect https://localhost:1443 cert.pem --context localhost
+{"level":"info","ts":1720694421.2032707,"caller":"context/Connect.go:40","msg":"authenticated against the smr-agent"}
+smr ps
+GROUP  NAME  DOCKER NAME  IMAGE  IP  PORTS  DEPS  DOCKER STATE  SMR STATE
+```
+Afterward access to control plane of the simple container is configured.
+
+## Running containers
+Define containers.yaml file:
+```yaml
+kind: containers
+meta:
+  name: application-bundle
+  group: app
+spec:
+  mysql:
+    meta:
+      name: mysql
+      group: mysql
+    spec:
+      options:
+        enabled: false
+      container:
+        image: "mysql"
+        tag: "8.0"
+        replicas: 1
+        envs:
+          - "MYSQL_ROOT_PASSWORD={{ configuration.password }}"
+        networks:
+          - "ghost"
+        ports:
+          - container: "3306"
+        readiness:
+          - name: "mysql.*"
+            operator: DatabaseReady
+            timeout: "20s"
+            body:
+              ip: "mysql.mysql-mysql-1.cluster.private"
+              username: "{{ configuration.username }}"
+              password: "{{ configuration.password }}"
+              port: "3306"
+        configuration:
+          username: "root"
+          password: "{{ configuration.mysql.*.password }}"
+```
+Define configuration-mysql.yaml file:
+```yaml
+kind: configuration
+spec:
+  meta:
+    group: mysql
+    identifier: "*"
+  spec:
+    data:
+      password: "{{ secret.mysql.mysql.password }}"
+```
+Run the next commands:
+```bash
+smr secret create secret.mysql.mysql.password 123456789
+smr apply configuration-mysql.yaml
+smr apply containers.yaml
+smr ps
+
 ```
 
-This will set the localhost context as the active one if the cert.pem is valid. All the smr commands will be against this context.
+## GitOps
 
-It is possible to have multiple contexts. Just use smr context switch [name].
+It is possible to hold definition YAML files in the repository and let the simplecontainer apply it from the repository.
 
-Running containers with smr
+```yaml
+kind: gitops
+spec:
+  meta:
+    group: test
+    identifier: testApp
+  spec:
+    repoURL: "https://github.com/simplecontainer/examples"
+    revision: "main"
+    directoryPath: "/gitops/bundle"
+```
+
+Applying this definition will create GitOps object on the simplecontainer.
+
+```bash
+smr gitops list                               
+GROUP  NAME     REPOSITORY                                   REVISION  SYNCED        AUTO   STATE    
+test   testApp  https://github.com/simplecontainer/examples  main      Never synced  false  Drifted  
+
+smr gitops test testApp sync 
+```
+
+In this example auto sync is disabled and needs to be triggered manually. When triggered the reconciler will apply 
+all the definitions in the `/gitops/bundle` directory from the `https://github.com/simplecontainer/examples` repository.
+
+Important links
 ---------------------------
-
-To create a definition for the container it is kind of a mix of Kubernetes definition and Docker compose definition.
-
-    kind: containers
-    containers:
-      traefik:
-        meta:
-          name: traefik
-          group: traefik
-        spec:
-          options:
-            enabled: false
-          container:
-            image: "traefik"
-            tag: "v2.5"
-            replicas: 1
-            networks:
-              - "demo"
-            volumes:
-              - host: "/var/run/docker.sock"
-                target: "/var/run/docker.sock"
-            ports:
-              - container: "80"
-                host: "80"
-              - container: "443"
-                host: "443"
-              - container: "8080"
-                host: "8888"
-
-definition-traefik.yaml
-
-After saving the file and running the next command:
-
-    smr apply definition.yaml
-
-The agent will pick up the definition and it will create the container via Docker API.
-
-Running `smr ps` or `docker ps` will return you the new state of the containers.
-
-The Traefik container should be up and running.
-
-    smr ps
-    Group    Name     Image         IPs                    Ports                     Dependencies  Status              
-    traefik  traefik  traefik:v2.5  172.17.0.3 10.10.0.2   80:80 443:443 8888:8080                 Dependency solved   
-
-
-Or
-
-    docker ps
-    CONTAINER ID   IMAGE          COMMAND                  CREATED              STATUS          PORTS                                                              NAMES
-    6962e21bdb6a   traefik:v2.5   "/entrypoint.sh trae…"   About a minute ago   Up 59 seconds   0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp, 0.0.0.0:8888->8080/tcp   smr-traefik-traefik-1
-    e33a624da8d3   smr:0.0.1      "/bin/sh -c '/opt/sm…"   4 hours ago          Up 4 hours      127.0.0.1:8080->8080/tcp                                           smr-agent
-
-All the containers controlled via smr will have `smr` prefix and will follow the next naming notation: `smr-group-name-replicaNumber`.
-
-Other containers can coexist with the one created using smr. Smr uses labels to track containers controlled via smr.
-
-For example, if we run `docker stop smr-traefik-traefik-1` the container will be recreated and started again. The defined state will try to be applied. If the container fails five times consecutively it will be marked as BackOff - dead.
-
-The definition of the containers follows an almost identical one from Docker compose.
-
-Let's add some configuration.
-
-    kind: resource
-    resource:
-      meta:
-        group: traefik
-        identifier: "*"
-      spec:
-        data:
-          traefik-configuration: |
-            providers:
-              docker:
-                exposedByDefault: false
-            
-            api:
-              insecure: true
-              dashboard: true
-
-
-resource-traefik.yaml
-
-The resource is kind of an object smr can understand. It exists as a standalone object something like ConfigMap or Secret.
-
-To use it in the containers hit `smr apply resource-traefik.yaml` and redefine the container definition.
-
-    kind: containers
-    containers:
-      traefik:
-        meta:
-          name: traefik
-          group: traefik
-        spec:
-          options:
-            enabled: false
-          container:
-            image: "traefik"
-            tag: "v2.5"
-            replicas: 1
-            networks:
-              - "demo"
-            volumes:
-              - host: "/var/run/docker.sock"
-                target: "/var/run/docker.sock"
-            ports:
-              - container: "80"
-                host: "80"
-              - container: "443"
-                host: "443"
-              - container: "8080"
-                host: "8888"
-            resources:
-              - identifier: "*"
-                key: traefik-configuration
-                mountPoint: /etc/traefik/traefik.yml
-
-definition-traefik.yaml
-
-Hitting `smr apply definition-traefik.yaml` will recreate the Traefik container and will mount the resource inside the container at the `/etc/traefik/traefik.yml`.
-
-Another object available for use is Configuration.
-
-    kind: configuration
-    configuration:
-      meta:
-        group: mysql
-        identifier: "*"
-      spec:
-        data:
-          password: "password123"
-
-Configuration object is also a standalone object and can be used to define secret or configuration variables for the container which later can be used at the runtime.
-
-    kind: containers
-    containers:
-      traefik:
-        meta:
-          name: traefik
-          group: traefik
-        spec:
-          options:
-            enabled: false
-          container:
-            image: "traefik"
-            tag: "v2.5"
-            replicas: 1
-            networks:
-              - "demo"
-            volumes:
-              - host: "/var/run/docker.sock"
-                target: "/var/run/docker.sock"
-            ports:
-              - container: "80"
-                host: "80"
-              - container: "443"
-                host: "443"
-              - container: "8080"
-                host: "8888"
-            resources:
-              - identifier: "*"
-                key: traefik-configuration
-                mountPoint: /etc/traefik/traefik.yml
-      mysql:
-        meta:
-          name: mysql
-          group: mysql
-        spec:
-          options:
-            enabled: false
-          container:
-            image: "mysql"
-            tag: "8.0"
-            replicas: 1
-            envs:
-              - "MYSQL_ROOT_PASSWORD={{ configuration.password }}"
-            networks:
-              - "demo"
-            configuration:
-              password: "{{ configuration.mysql[*].password }}"
-
-definition-traefik.yaml
-
-Hitting `smr apply definition-traefik.yaml` will now only create mysql container since Traefik's definition is the same.
-
-As you can see container definition is templatable using `{{ }}` notation to access the runtime data or another object data.
-
-Features included in the smr:
-
-*   Own DNS resolving - [Read more here](https://smr.qdnqn.com/dns/)
-*   Gitops - [Read more here](https://smr.qdnqn.com/gitops/)
-*   Key-Value store holding all data - [Read more here](https://smr.qdnqn.com/key-value-store/)
-*   Replicas and headless service - [Read more here](https://smr.qdnqn.com/replicas/)
-*   [Configuration](https://smr.qdnqn.com/configuration/) and [resources](https://smr.qdnqn.com/resource/)
-*   Templating of the container objects with runtime information - [Read more here](https://smr.qdnqn.com/templating-container-object/)
-*   Dependencies between containers - [Read more here](https://smr.qdnqn.com/container-dependencies/)
-*   Operators - [Read more here](https://smr.qdnqn.com/operators/)
-*   Reconciliation - [Read more here](https://smr.qdnqn.com/reconciliation/)
-*   [Smr agent](https://smr.qdnqn.com/reconciliation/) and [smr client](https://github.com/simplecontainer/smr-client?ref=smr.qdnqn.com)
-
-You can also check official repositories.
-
-https://github.com/simplecontainer/smr?ref=smr.qdnqn.com)
-https://github.com/simplecontainer/smr-client?ref=smr.qdnqn.com)
-
-Or if you want more examples hit the examples repository.
-
-https://github.com/simplecontainer/smr-examples?ref=smr.qdnqn.com
+- https://github.com/simplecontainer/smr
+- https://github.com/simplecontainer/client
+- https://github.com/simplecontainer/examples
+- https://smr.qdnqn.com
 
 # License
 This project is licensed under the GNU General Public License v3.0. See more in LICENSE file.

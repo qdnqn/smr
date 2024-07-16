@@ -71,7 +71,7 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 
 	var format *f.Format
 
-	format = f.New("resource", resource.Meta.Group, resource.Meta.Identifier, "object")
+	format = f.New("resource", resource.Meta.Group, resource.Meta.Name, "object")
 	obj := objects.New(implementation.Shared.Client)
 	err = obj.Find(format)
 
@@ -95,7 +95,7 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 		sharedHub.Event <- &hub.Event{
 			Kind:       KIND,
 			Group:      resource.Meta.Group,
-			Identifier: resource.Meta.Identifier,
+			Identifier: resource.Meta.Name,
 			Data:       nil,
 		}
 	} else {
@@ -140,7 +140,7 @@ func (implementation *Implementation) Compare(jsonData []byte) (httpcontract.Res
 
 	var format *f.Format
 
-	format = f.New("resource", resource.Meta.Group, resource.Meta.Identifier, "object")
+	format = f.New("resource", resource.Meta.Group, resource.Meta.Name, "object")
 	obj := objects.New(implementation.Shared.Client)
 	err = obj.Find(format)
 
@@ -199,7 +199,7 @@ func (implementation *Implementation) Delete(jsonData []byte) (httpcontract.Resp
 
 	mapstructure.Decode(data["spec"], &resource)
 
-	format := f.New("resource", resource.Meta.Group, resource.Meta.Identifier, "object")
+	format := f.New("resource", resource.Meta.Group, resource.Meta.Name, "object")
 
 	obj := objects.New(implementation.Shared.Client)
 	err = obj.Find(format)
@@ -208,7 +208,7 @@ func (implementation *Implementation) Delete(jsonData []byte) (httpcontract.Resp
 		deleted, err := obj.Remove(format)
 
 		if deleted {
-			format = f.New("httpauth", resource.Meta.Group, resource.Meta.Identifier, "")
+			format = f.New("httpauth", resource.Meta.Group, resource.Meta.Name, "")
 			deleted, err = obj.Remove(format)
 
 			return httpcontract.ResponseImplementation{

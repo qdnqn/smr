@@ -19,6 +19,11 @@ func ParseTemplate(obj objects.ObjectInterface, retrieve map[string]string, root
 		formatFind := f.NewFromString(placeholder)
 		keyToRetrieve := formatFind.Key
 
+		// Ignore secrets because they are handled on the container unpack level
+		if formatFind.Kind == "secret" {
+			continue
+		}
+
 		formatFind.Key = "object"
 		err := obj.Find(formatFind)
 
@@ -52,12 +57,22 @@ func ParseTemplate(obj objects.ObjectInterface, retrieve map[string]string, root
 		}
 	}
 
-	for format, value := range SaveToKVStore {
-		err := obj.Add(f.NewFromString(format), value)
+	if rootFormat != nil {
+		for key, value := range SaveToKVStore {
+			format := f.NewFromString(key)
+			format.Key = key
 
-		if err != nil {
-			return nil, nil, err
+			err := obj.Add(format, value)
+
+			if err != nil {
+				return nil, nil, err
+			}
 		}
+	}
+
+	// Add non matches to the cumulative result
+	for k, v := range SaveToKVStore {
+		RetrieveFromKVStore[k] = v
 	}
 
 	return RetrieveFromKVStore, dependencyMap, nil
@@ -99,10 +114,7 @@ func GetTemplatePlaceholders(values map[string]string, rootFormat *f.Format) (ma
 				RetrieveFromKVStore[keyOriginal] = format.ToString()
 			}
 		} else {
-			if rootFormat != nil {
-				rootFormat.Key = keyOriginal
-				SaveToKVStore[rootFormat.ToString()] = value
-			}
+			SaveToKVStore[keyOriginal] = value
 		}
 	}
 

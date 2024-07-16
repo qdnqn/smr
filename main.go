@@ -47,6 +47,7 @@ import (
 //	@externalDocs.url			https://swagger.io/resources/open-api/
 
 func main() {
+	startup.SetFlags()
 	logger.Log = logger.NewLogger()
 
 	logLevel := os.Getenv("LOG_LEVEL")
@@ -56,6 +57,7 @@ func main() {
 
 	fmt.Println(fmt.Sprintf("logging level set to %s (override with LOG_LEVEL env variable)", logLevel))
 
+	// Prepare configuration for the commands
 	conf := configuration.NewConfig()
 	conf.Environment = startup.GetEnvironmentInfo()
 	startup.ReadFlags(conf)
@@ -64,6 +66,7 @@ func main() {
 	api := api.NewApi(conf, db)
 	api.Manager.LogLevel = helpers.GetLogLevel(logLevel)
 
+	// Run any commands before starting daemon
 	commands.PreloadCommands()
 	commands.Run(api.Manager)
 
@@ -77,6 +80,37 @@ func main() {
 
 	if err != nil {
 		panic(err)
+	}
+
+	// Prepare configuration for the daeamon
+	api.Config = conf
+	api.Config.Environment = startup.GetEnvironmentInfo()
+	startup.ReadFlags(api.Config)
+
+	api.Keys = mtls.NewKeys("/home/smr-agent/.ssh")
+	api.Manager.Keys = api.Keys
+
+	fmt.Println(api.Config)
+
+	var found bool
+	found, err = mtls.GenerateIfNoKeysFound(api.Keys, api.Config)
+
+	if err != nil {
+		panic(err)
+	}
+
+	if !found {
+		err = mtls.SaveToDirectory(api.Keys)
+
+		if err != nil {
+			logger.Log.Error("failed to save keys to directory", zap.String("error", err.Error()))
+			os.Exit(1)
+		}
+
+		fmt.Println("Certificate is generated for the use by the smr client!")
+		fmt.Println("Copy-paste it to safe location for further use - it will not be printed anymore in the logs")
+		fmt.Println(mtls.GeneratePemBundle(api.Keys))
+		os.Exit(0)
 	}
 
 	if viper.GetBool("daemon") {
@@ -118,12 +152,12 @@ func main() {
 
 			database := v1.Group("database")
 			{
+				database.POST("create/:key", api.DatabaseSet)
+				database.PUT("update/:key", api.DatabaseSet)
 				database.GET("get/:key", api.DatabaseGet)
 				database.GET("keys", api.DatabaseGetKeys)
 				database.GET("keys/:prefix", api.DatabaseGetKeysPrefix)
 				database.DELETE("keys/:prefix", api.DatabaseRemoveKeys)
-				database.POST("create/:key", api.DatabaseSet)
-				database.PUT("update/:key", api.DatabaseSet)
 			}
 
 			secrets := v1.Group("secrets")
@@ -139,28 +173,6 @@ func main() {
 		router.GET("/healthz", api.Health)
 
 		if viper.GetBool("daemon-secured") {
-			api.Keys = mtls.NewKeys("/home/smr-agent/.ssh")
-			api.Manager.Keys = api.Keys
-
-			found, err := mtls.GenerateIfNoKeysFound(api.Keys, api.Config)
-
-			if err != nil {
-				panic("failed to generate or read mtls keys")
-			}
-
-			if !found {
-				err = mtls.SaveToDirectory(api.Keys)
-
-				if err != nil {
-					logger.Log.Error("failed to save keys to directory", zap.String("error", err.Error()))
-					os.Exit(1)
-				}
-
-				fmt.Println("Certificate is generated for the use by the smr client!")
-				fmt.Println("Copy-paste it to safe location for further use - it will not be printed anymore in the logs")
-				fmt.Println(mtls.GeneratePemBundle(api.Keys))
-			}
-
 			api.SetupEncryptedDatabase(api.Keys.ServerPrivateKey.Bytes()[:32])
 
 			certPool := x509.NewCertPool()
@@ -186,7 +198,7 @@ func main() {
 				TLSConfig: tlsConfig,
 			}
 
-			api.DnsCache.AddARecord("smr-agent.docker.private.", api.Config.Environment.AGENTIP)
+			api.DnsCache.AddARecord(static.SMR_AGENT_DOMAIN, api.Config.Environment.AGENTIP)
 
 			plugins.StartPlugins(api.Config.Root, api.Manager)
 

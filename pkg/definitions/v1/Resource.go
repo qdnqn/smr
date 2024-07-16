@@ -12,8 +12,8 @@ type Resource struct {
 }
 
 type ResourceMeta struct {
-	Group      string `json:"group"`
-	Identifier string `json:"identifier"`
+	Group string `json:"group"`
+	Name  string `json:"name"`
 }
 
 type ResourceSpec struct {

@@ -19,4 +19,6 @@ docker run \
        -p 0.0.0.0:1443:1443 \
        --dns 127.0.0.1 \
        --name smr-agent \
+       -e DOMAIN=localhost \
+       -e EXTERNALIP=127.0.0.1 \
        -it smr:$LATEST_SMR_COMMIT

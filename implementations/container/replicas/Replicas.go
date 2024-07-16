@@ -1,20 +1,23 @@
 package replicas
 
 import (
-	"errors"
 	"github.com/r3labs/diff/v3"
 	"github.com/simplecontainer/smr/implementations/container/container"
 	"github.com/simplecontainer/smr/implementations/container/shared"
-	"github.com/simplecontainer/smr/implementations/container/status"
 	"github.com/simplecontainer/smr/pkg/definitions/v1"
-	"github.com/simplecontainer/smr/pkg/logger"
-	"go.uber.org/zap"
 	"strings"
 )
 
-func (replicas *Replicas) HandleReplica(shared *shared.Shared, containerDefinition v1.Container, changelog diff.Changelog) ([]string, []string, error) {
-	groups := make([]string, 0)
-	names := make([]string, 0)
+func (replicas *Replicas) HandleReplica(shared *shared.Shared, containerDefinition v1.Container, changelog diff.Changelog) (map[string][]string, map[string][]string, error) {
+	create := map[string][]string{
+		"groups": make([]string, 0),
+		"names":  make([]string, 0),
+	}
+
+	remove := map[string][]string{
+		"groups": make([]string, 0),
+		"names":  make([]string, 0),
+	}
 
 	numberOfReplicasToCreate, numberOfReplicasToDestroy, existingNumberOfReplicas := replicas.GetReplicaNumbers(replicas.Replicas, replicas.GeneratedIndex)
 
@@ -25,11 +28,9 @@ func (replicas *Replicas) HandleReplica(shared *shared.Shared, containerDefiniti
 			existingContainer := shared.Registry.Find(containerDefinition.Meta.Group, name)
 
 			if existingContainer != nil {
-				existingContainer.Status.TransitionState(existingContainer.Static.GeneratedName, status.STATUS_PENDING_DELETE)
+				remove["groups"] = append(remove["groups"], existingContainer.Static.Group)
+				remove["names"] = append(remove["names"], existingContainer.Static.GeneratedName)
 			}
-
-			groups = append(groups, replicas.Group)
-			names = append(names, name)
 		}
 	}
 
@@ -39,10 +40,6 @@ func (replicas *Replicas) HandleReplica(shared *shared.Shared, containerDefiniti
 		existingContainer := shared.Registry.Find(containerDefinition.Meta.Group, name)
 
 		if existingContainer != nil {
-			if existingContainer.Status.IfStateIs(status.STATUS_RECONCILING) {
-				return nil, nil, errors.New("container is in reconciliation process try again later")
-			}
-
 			var onlyReplicaChange = false
 
 			if len(changelog) == 1 {
@@ -56,7 +53,6 @@ func (replicas *Replicas) HandleReplica(shared *shared.Shared, containerDefiniti
 			}
 
 			if onlyReplicaChange {
-				logger.Log.Debug("skipped recreating container since only scale up is triggered", zap.String("container", name), zap.String("group", replicas.Group))
 				continue
 			}
 		}
@@ -64,24 +60,22 @@ func (replicas *Replicas) HandleReplica(shared *shared.Shared, containerDefiniti
 		containerObj, err := container.NewContainerFromDefinition(shared.Manager.Config.Environment, name, containerDefinition)
 
 		if err != nil {
-			return []string{}, []string{}, err
+			return nil, nil, err
 		}
 
 		if existingContainer == nil {
 			shared.Registry.AddOrUpdate(replicas.Group, name, shared.Manager.Config.Environment.PROJECT, containerObj)
-			logger.Log.Debug("added container to registry", zap.String("container", name), zap.String("group", replicas.Group))
 		} else {
 			if replicas.Changed {
 				shared.Registry.AddOrUpdate(replicas.Group, name, shared.Manager.Config.Environment.PROJECT, containerObj)
-				logger.Log.Debug("update container since replica changed in registry", zap.String("container", name), zap.String("group", replicas.Group))
 			}
 		}
 
-		groups = append(groups, replicas.Group)
-		names = append(names, name)
+		create["groups"] = append(create["groups"], replicas.Group)
+		create["names"] = append(create["names"], name)
 	}
 
-	return groups, names, nil
+	return create, remove, nil
 }
 
 func (replicas *Replicas) GetReplica(shared *shared.Shared, containerDefinition v1.Container) ([]string, []string, error) {

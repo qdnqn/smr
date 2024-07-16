@@ -13,15 +13,12 @@ type Dependency struct {
 }
 
 type State struct {
-	Name       string
-	Success    bool
-	Missing    bool
-	Timeout    bool
-	Error      error
-	TryToSolve bool
-	NotRunning bool
-	Depend     *Dependency
+	State int8
 }
+
+const CHECKING = 0
+const SUCCESS = 1
+const FAILED = 2
 
 type Result struct {
 	Data string

@@ -26,7 +26,7 @@ func NewWatcher(gitopsObj *v1.Gitops, mgr *manager.Manager) *watcher.Gitops {
 	ctx, fn := context.WithCancel(context.Background())
 
 	cfg := zap.NewProductionConfig()
-	cfg.OutputPaths = []string{fmt.Sprintf("/tmp/gitops.%s.%s.log", gitopsObj.Meta.Group, gitopsObj.Meta.Identifier)}
+	cfg.OutputPaths = []string{fmt.Sprintf("/tmp/gitops.%s.%s.log", gitopsObj.Meta.Group, gitopsObj.Meta.Name)}
 
 	loggerObj, err := cfg.Build()
 
@@ -71,7 +71,7 @@ func HandleTickerAndEvents(shared *shared.Shared, gitopsWatcher *watcher.Gitops)
 		case <-gitopsWatcher.Ctx.Done():
 			gitopsWatcher.Ticker.Stop()
 			close(gitopsWatcher.GitopsQueue)
-			shared.Watcher.Remove(fmt.Sprintf("%s.%s", gitopsWatcher.Gitops.Definition.Meta.Group, gitopsWatcher.Gitops.Definition.Meta.Identifier))
+			shared.Watcher.Remove(fmt.Sprintf("%s.%s", gitopsWatcher.Gitops.Definition.Meta.Group, gitopsWatcher.Gitops.Definition.Meta.Name))
 
 			return
 		case <-gitopsWatcher.GitopsQueue:
@@ -305,11 +305,11 @@ func sendRequest(client *http.Client, URL string, data string, gitopsObj *gitops
 
 		req, err = http.NewRequest("POST", URL, bytes.NewBuffer([]byte(data)))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Owner", fmt.Sprintf("gitops.%s.%s", gitopsObj.Definition.Meta.Group, gitopsObj.Definition.Meta.Identifier))
+		req.Header.Set("Owner", fmt.Sprintf("gitops.%s.%s", gitopsObj.Definition.Meta.Group, gitopsObj.Definition.Meta.Name))
 	} else {
 		req, err = http.NewRequest("GET", URL, nil)
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Owner", fmt.Sprintf("gitops.%s.%s", gitopsObj.Definition.Meta.Group, gitopsObj.Definition.Meta.Identifier))
+		req.Header.Set("Owner", fmt.Sprintf("gitops.%s.%s", gitopsObj.Definition.Meta.Group, gitopsObj.Definition.Meta.Name))
 	}
 
 	if err != nil {

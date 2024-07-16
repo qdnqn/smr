@@ -62,6 +62,7 @@ func (registry *Registry) NameReplicas(group string, name string, project string
 }
 
 func (registry *Registry) BackOffTracking(group string, name string) {
+	registry.ContainersLock.Lock()
 	if registry.BackOffTracker[group] == nil {
 		tmp := make(map[string]int)
 		tmp[name] = 0
@@ -70,9 +71,11 @@ func (registry *Registry) BackOffTracking(group string, name string) {
 	}
 
 	registry.BackOffTracker[group][name] += 1
+	registry.ContainersLock.Unlock()
 }
 
 func (registry *Registry) BackOffReset(group string, name string) {
+	registry.ContainersLock.Lock()
 	if registry.BackOffTracker[group] == nil {
 		tmp := make(map[string]int)
 		tmp[name] = 0
@@ -81,4 +84,5 @@ func (registry *Registry) BackOffReset(group string, name string) {
 	}
 
 	registry.BackOffTracker[group][name] = 0
+	registry.ContainersLock.Unlock()
 }

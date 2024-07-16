@@ -12,6 +12,8 @@ func New() *Records {
 }
 
 func (r *Records) AddARecord(domain string, ip string) {
+	domain = fmt.Sprintf("%s.", domain)
+
 	if len(r.ARecords) > 0 {
 		_, ARecordexists := r.ARecords[domain]
 

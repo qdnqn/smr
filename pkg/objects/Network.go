@@ -3,6 +3,7 @@ package objects
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/simplecontainer/smr/pkg/httpcontract"
 	"io"
 	"net/http"
@@ -10,10 +11,11 @@ import (
 
 func SendRequest(client *http.Client, URL string, method string, data map[string]string) *httpcontract.ResponseOperator {
 	var req *http.Request
+	var marshaled []byte
 	var err error
 
 	if data != nil {
-		marshaled, err := json.Marshal(data)
+		marshaled, err = json.Marshal(data)
 
 		if err != nil {
 			return &httpcontract.ResponseOperator{
@@ -26,7 +28,7 @@ func SendRequest(client *http.Client, URL string, method string, data map[string
 			}
 		}
 
-		req, err = http.NewRequest("POST", URL, bytes.NewBuffer(marshaled))
+		req, err = http.NewRequest(method, URL, bytes.NewBuffer(marshaled))
 		req.Header.Set("Content-Type", "application/json")
 	} else {
 		req, err = http.NewRequest(method, URL, nil)
@@ -77,7 +79,7 @@ func SendRequest(client *http.Client, URL string, method string, data map[string
 		return &httpcontract.ResponseOperator{
 			HttpStatus:       0,
 			Explanation:      "failed to unmarshal body response from smr-agent",
-			ErrorExplanation: err.Error(),
+			ErrorExplanation: generateResponse(URL, method, marshaled, body),
 			Error:            true,
 			Success:          false,
 			Data:             nil,
@@ -85,4 +87,8 @@ func SendRequest(client *http.Client, URL string, method string, data map[string
 	}
 
 	return &response
+}
+
+func generateResponse(URL string, method string, data []byte, body []byte) string {
+	return fmt.Sprintf("URL: %s\nMETHOD: %s\nSEND_DATA: \n\n%s\nRESPONSE:\n\n%s", URL, method, string(data), string(body))
 }

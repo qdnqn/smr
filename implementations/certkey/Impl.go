@@ -70,7 +70,7 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 	mapstructure.Decode(data["certkey"], &certkey)
 
 	var format *f.Format
-	format = f.New("certkey", certkey.Meta.Group, certkey.Meta.Identifier, "object")
+	format = f.New("certkey", certkey.Meta.Group, certkey.Meta.Name, "object")
 
 	obj := objects.New(implementation.Shared.Client)
 	err = obj.Find(format)
@@ -95,7 +95,7 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 		sharedHub.Event <- &hub.Event{
 			Kind:       KIND,
 			Group:      certkey.Meta.Group,
-			Identifier: certkey.Meta.Identifier,
+			Identifier: certkey.Meta.Name,
 			Data:       nil,
 		}
 	} else {
@@ -140,7 +140,7 @@ func (implementation *Implementation) Compare(jsonData []byte) (httpcontract.Res
 
 	var format *f.Format
 
-	format = f.New("certkey", certkey.Meta.Group, certkey.Meta.Identifier, "object")
+	format = f.New("certkey", certkey.Meta.Group, certkey.Meta.Name, "object")
 	obj := objects.New(implementation.Shared.Client)
 	err = obj.Find(format)
 
@@ -199,7 +199,7 @@ func (implementation *Implementation) Delete(jsonData []byte) (httpcontract.Resp
 
 	mapstructure.Decode(data["certkey"], &certkey)
 
-	format := f.New("certkey", certkey.Meta.Group, certkey.Meta.Identifier, "object")
+	format := f.New("certkey", certkey.Meta.Group, certkey.Meta.Name, "object")
 
 	obj := objects.New(implementation.Shared.Client)
 	err = obj.Find(format)
@@ -208,7 +208,7 @@ func (implementation *Implementation) Delete(jsonData []byte) (httpcontract.Resp
 		deleted, err := obj.Remove(format)
 
 		if deleted {
-			format = f.New("certkey", certkey.Meta.Group, certkey.Meta.Identifier, "")
+			format = f.New("certkey", certkey.Meta.Group, certkey.Meta.Name, "")
 			deleted, err = obj.Remove(format)
 
 			return httpcontract.ResponseImplementation{

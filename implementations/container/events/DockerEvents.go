@@ -103,12 +103,14 @@ func HandleConnect(shared *shared.Shared, container *container.Container, event 
 }
 
 func HandleDisconnect(shared *shared.Shared, containerObj *container.Container, event events.Message) {
-	for _, ip := range shared.DnsCache.FindDeleteQueue(containerObj.GetDomain()) {
-		shared.DnsCache.RemoveARecord(containerObj.GetDomain(), ip)
-		shared.DnsCache.RemoveARecord(containerObj.GetHeadlessDomain(), ip)
-	}
+	for _, n := range containerObj.Runtime.Networks {
+		for _, ip := range shared.DnsCache.FindDeleteQueue(containerObj.GetDomain(n.NetworkName)) {
+			shared.DnsCache.RemoveARecord(containerObj.GetDomain(n.NetworkName), ip)
+			shared.DnsCache.RemoveARecord(containerObj.GetHeadlessDomain(n.NetworkName), ip)
+		}
 
-	shared.DnsCache.ResetDeleteQueue(containerObj.GetDomain())
+		shared.DnsCache.ResetDeleteQueue(containerObj.GetDomain(n.NetworkName))
+	}
 }
 
 func HandleStart(shared *shared.Shared, containerObj *container.Container, event events.Message) {
@@ -121,7 +123,7 @@ func HandleKill(shared *shared.Shared, containerObj *container.Container, event 
 	//containerObj.Status.TransitionState(containerObj.Static.GeneratedName, status.STATUS_KILLED)
 
 	for _, n := range containerObj.Runtime.Networks {
-		shared.DnsCache.RemoveARecordQueue(containerObj.GetDomain(), n.IP)
+		shared.DnsCache.RemoveARecordQueue(containerObj.GetDomain(n.NetworkName), n.IP)
 	}
 }
 
@@ -131,10 +133,6 @@ func HandleStop(shared *shared.Shared, containerObj *container.Container, event 
 }
 
 func HandleDie(shared *shared.Shared, containerObj *container.Container, event events.Message) {
-	fmt.Println("Container died")
-	fmt.Println(containerObj.Status.GetState())
-	//containerObj.Status.TransitionState(containerObj.Static.GeneratedName, status.STATUS_DEAD)
-
 	reconcile := true
 
 	// labels for ignoring events for specific container

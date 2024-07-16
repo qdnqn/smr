@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/cenkalti/backoff/v4"
-	"github.com/simplecontainer/smr/implementations/container/shared"
+	"github.com/simplecontainer/smr/implementations/container/registry"
 	"github.com/simplecontainer/smr/implementations/container/status"
 	"github.com/simplecontainer/smr/pkg/definitions/v1"
 	"github.com/simplecontainer/smr/pkg/f"
@@ -32,62 +32,58 @@ func NewDependencyFromDefinition(depend v1.DependsOn) *Dependency {
 	}
 }
 
-func Ready(shared *shared.Shared, group string, name string, dependsOn []v1.DependsOn) (bool, error) {
+func Ready(registry *registry.Registry, group string, name string, dependsOn []v1.DependsOn, channel chan *State) (bool, error) {
 	for _, depend := range dependsOn {
 		dependency := NewDependencyFromDefinition(depend)
 		dependency.Function = func() error {
-			return SolveDepends(shared, group, name, dependency)
+			return SolveDepends(registry, group, name, dependency, channel)
 		}
 
 		backOff := backoff.WithContext(backoff.NewExponentialBackOff(), dependency.Ctx)
 
 		err := backoff.Retry(dependency.Function, backOff)
 		if err != nil {
-			container := shared.Registry.Find(group, name)
+			dependency.Cancel()
 
-			if container != nil {
-				container.Status.TransitionState(name, status.STATUS_DEPENDS_FAILED)
+			channel <- &State{
+				State: FAILED,
 			}
 
 			return false, nil
 		}
-
-		container := shared.Registry.Find(group, name)
-
-		if container != nil {
-			container.Status.TransitionState(name, status.STATUS_DEPENDS_SOLVED)
-		}
-
-		return true, nil
 	}
 
-	container := shared.Registry.Find(group, name)
-
-	if container != nil {
-		container.Status.TransitionState(name, status.STATUS_DEPENDS_SOLVED)
+	channel <- &State{
+		State: SUCCESS,
 	}
 
 	return true, nil
 }
 
-func SolveDepends(shared *shared.Shared, myGroup string, myName string, depend *Dependency) error {
+func SolveDepends(registry *registry.Registry, myGroup string, myName string, depend *Dependency, channel chan *State) error {
 	format := f.NewFromString(depend.Name)
 
-	myContainer := shared.Registry.Find(myGroup, myName)
+	myContainer := registry.Find(myGroup, myName)
 
-	if myContainer == nil {
+	if myContainer == nil || myContainer.Status.IfStateIs(status.STATUS_DEPENDS_CHECKING) {
 		depend.Cancel()
+		return errors.New("container not found")
 	}
 
 	otherGroup := format.Kind
 	otherName := format.Group
 
-	container := shared.Registry.Find(otherGroup, otherName)
+	channel <- &State{
+		State: CHECKING,
+	}
+
+	container := registry.Find(otherGroup, otherName)
 
 	if container == nil {
 		return errors.New("container not found")
 	} else {
 		if container.Status.LastReadiness {
+			depend.Cancel()
 			return nil
 		} else {
 			return errors.New("container not ready")

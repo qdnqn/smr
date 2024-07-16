@@ -8,13 +8,8 @@ func (ContainerWatcher *ContainerWatcher) AddOrUpdate(groupidentifier string, co
 	}
 }
 
-func (ContainerWatcher *ContainerWatcher) Remove(groupidentifier string) bool {
-	if ContainerWatcher.Container[groupidentifier] == nil {
-		return true
-	} else {
-		delete(ContainerWatcher.Container, groupidentifier)
-		return true
-	}
+func (ContainerWatcher *ContainerWatcher) Remove(groupidentifier string) {
+	delete(ContainerWatcher.Container, groupidentifier)
 }
 
 func (ContainerWatcher *ContainerWatcher) Find(groupidentifier string) *Container {

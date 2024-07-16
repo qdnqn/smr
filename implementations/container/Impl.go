@@ -75,9 +75,9 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 		}, err
 	}
 
-	valid, err := containerDefinition.Validate()
+	_, err := containerDefinition.Validate()
 
-	if !valid {
+	if err != nil {
 		return httpcontract.ResponseImplementation{
 			HttpStatus:       400,
 			Explanation:      "invalid definition sent",
@@ -107,40 +107,79 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 	if obj.Exists() {
 		if obj.Diff(jsonStringFromRequest) {
 			err = obj.Update(format, jsonStringFromRequest)
+
+			if err != nil {
+				return httpcontract.ResponseImplementation{
+					HttpStatus:       200,
+					Explanation:      "failed to update object",
+					ErrorExplanation: err.Error(),
+					Error:            false,
+					Success:          true,
+				}, err
+			}
 		}
 	} else {
 		err = obj.Add(format, jsonStringFromRequest)
+
+		if err != nil {
+			return httpcontract.ResponseImplementation{
+				HttpStatus:       200,
+				Explanation:      "failed to add object",
+				ErrorExplanation: err.Error(),
+				Error:            false,
+				Success:          true,
+			}, err
+		}
 	}
 
-	groups, names, err := generateReplicaNamesAndGroups(implementation.Shared, obj.ChangeDetected(), *containerDefinition, obj.Changelog)
+	var create map[string][]string
+	var remove map[string][]string
+
+	create, remove, err = generateReplicaNamesAndGroups(implementation.Shared, obj.ChangeDetected(), *containerDefinition, obj.Changelog)
 
 	if err == nil {
-		if len(groups) > 0 {
-			containerObjs := FetchContainersFromRegistry(implementation.Shared.Registry, groups, names)
+		if len(remove["groups"]) > 0 {
+			containerObjs := FetchContainersFromRegistry(implementation.Shared.Registry, remove["groups"], remove["names"])
+
+			for _, containerObj := range containerObjs {
+				GroupIdentifier := fmt.Sprintf("%s.%s", containerObj.Static.Group, containerObj.Static.GeneratedName)
+
+				format = f.New("container", containerObj.Static.Group, containerObj.Static.Name, "")
+				obj.Remove(format)
+
+				format = f.New("configuration", containerObj.Static.Group, containerObj.Static.GeneratedName, "")
+				obj.Remove(format)
+
+				containerObj.Status.TransitionState(containerObj.Static.GeneratedName, status.STATUS_PENDING_DELETE)
+				reconcile.ReconcileContainer(implementation.Shared, implementation.Shared.Watcher.Find(GroupIdentifier))
+			}
+		}
+
+		if len(create["groups"]) > 0 {
+			containerObjs := FetchContainersFromRegistry(implementation.Shared.Registry, create["groups"], create["names"])
 
 			for k, containerObj := range containerObjs {
+				// containerObj is fetched from the registry and can be used instead of the object
+				// registry is modified by the generateReplicaNamesAndGroups so it is safe to use
+				// it instead of the object
+
 				if obj.ChangeDetected() || !obj.Exists() {
-					containerFromDefinition := reconcile.NewWatcher(containerObjs[k], implementation.Shared.Manager)
 					GroupIdentifier := fmt.Sprintf("%s.%s", containerObj.Static.Group, containerObj.Static.GeneratedName)
 
-					containerFromDefinition.Logger.Info("new container object created",
-						zap.String("group", containerFromDefinition.Container.Static.Definition.Meta.Group),
-						zap.String("identifier", containerFromDefinition.Container.Static.Definition.Meta.Name),
-					)
+					containerFromDefinition := implementation.Shared.Watcher.Find(GroupIdentifier)
 
-					ContainerTracker := implementation.Shared.Watcher.Find(GroupIdentifier)
+					if containerFromDefinition == nil {
+						containerFromDefinition = reconcile.NewWatcher(containerObjs[k], implementation.Shared.Manager)
+						containerFromDefinition.Logger.Info("container object created")
+
+						go reconcile.HandleTickerAndEvents(implementation.Shared, containerFromDefinition)
+					} else {
+						containerFromDefinition.Container = containerObjs[k]
+						containerFromDefinition.Logger.Info("container object modified")
+					}
 
 					containerFromDefinition.Container.Status.SetState(status.STATUS_CREATED)
 					implementation.Shared.Watcher.AddOrUpdate(GroupIdentifier, containerFromDefinition)
-
-					if ContainerTracker == nil {
-						go reconcile.HandleTickerAndEvents(implementation.Shared, containerFromDefinition)
-					} else {
-						if ContainerTracker.Tracking == false {
-							ContainerTracker.Tracking = true
-							go reconcile.HandleTickerAndEvents(implementation.Shared, containerFromDefinition)
-						}
-					}
 
 					reconcile.ReconcileContainer(implementation.Shared, containerFromDefinition)
 				} else {
@@ -267,7 +306,7 @@ func FetchContainersFromRegistry(registry *registry.Registry, groups []string, n
 	return order
 }
 
-func generateReplicaNamesAndGroups(shared *shared.Shared, changed bool, containerDefinition v1.Container, changelog diff.Changelog) ([]string, []string, error) {
+func generateReplicaNamesAndGroups(shared *shared.Shared, changed bool, containerDefinition v1.Container, changelog diff.Changelog) (map[string][]string, map[string][]string, error) {
 	_, index := shared.Registry.Name(containerDefinition.Meta.Group, containerDefinition.Meta.Name, shared.Manager.Config.Environment.PROJECT)
 
 	r := replicas.Replicas{
@@ -277,9 +316,9 @@ func generateReplicaNamesAndGroups(shared *shared.Shared, changed bool, containe
 		Changed:        changed,
 	}
 
-	groups, names, err := r.HandleReplica(shared, containerDefinition, changelog)
+	create, remove, err := r.HandleReplica(shared, containerDefinition, changelog)
 
-	return groups, names, err
+	return create, remove, err
 }
 
 func GetReplicaNamesAndGroups(shared *shared.Shared, containerDefinition v1.Container) ([]string, []string, error) {

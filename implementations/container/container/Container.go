@@ -61,6 +61,7 @@ func NewContainerFromDefinition(environment *configuration.Environment, name str
 			NetworkMode:   definition.Spec.Container.NetworkMode,
 			Privileged:    definition.Spec.Container.Privileged,
 			Readiness:     convertReadinessDefinitionToReadiness(definition.Spec.Container.Readiness),
+			Resources:     convertResourcesDefinitionToResources(definition.Spec.Container.Resources),
 			Definition:    definitionCopy,
 		},
 		Runtime: Runtime{
@@ -71,10 +72,9 @@ func NewContainerFromDefinition(environment *configuration.Environment, name str
 			FoundRunning:  false,
 			Configuration: definition.Spec.Container.Configuration,
 			Owner:         Owner{},
-			Resources:     mapAnyToResources(definition.Spec.Container.Resources),
 		},
 		Status: status.Status{
-			State:      "",
+			State:      status.StatusState{},
 			LastUpdate: time.Now(),
 		},
 	}
@@ -165,31 +165,6 @@ func Existing(name string) *Container {
 	}
 }
 
-func GetContainers() []types.Container {
-	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		panic(err)
-	}
-	defer cli.Close()
-
-	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{})
-
-	if err != nil {
-		panic(err)
-	}
-
-	containersFiltered := make([]types.Container, 0, 0)
-
-	for _, container := range containers {
-		if container.Labels["managed"] == "smr" && container.State == "running" {
-			containersFiltered = append(containersFiltered, container)
-		}
-	}
-
-	return containersFiltered
-}
-
 func (container *Container) SetOwner(owner string) {
 	if owner != "" {
 		splitted := strings.SplitN(owner, ".", 2)
@@ -202,11 +177,7 @@ func (container *Container) SetOwner(owner string) {
 }
 
 func (container *Container) Run(environment *configuration.Environment, client *http.Client, dnsCache *dns.Records) (*types.Container, error) {
-	c, err := container.Get()
-
-	if err != nil {
-		return nil, err
-	}
+	c, _ := container.Get()
 
 	if c == nil {
 		return container.run(c, environment, client, dnsCache)
@@ -258,7 +229,7 @@ func (container *Container) run(c *types.Container, environment *configuration.E
 		DNS: []string{
 			environment.AGENTIP,
 		},
-		Mounts:       container.mappingToMounts(httpClient, environment),
+		Mounts:       container.mappingToMounts(httpClient),
 		PortBindings: container.portMappings(),
 		NetworkMode:  dockerContainer.NetworkMode(container.Static.NetworkMode),
 		Privileged:   container.Static.Privileged,
@@ -280,7 +251,9 @@ func (container *Container) run(c *types.Container, environment *configuration.E
 	}
 
 	for _, dnetw := range data.NetworkSettings.Networks {
-		netwInspect, err := cli.NetworkInspect(ctx, dnetw.NetworkID, types.NetworkInspectOptions{
+		var netwInspect types.NetworkResource
+
+		netwInspect, err = cli.NetworkInspect(ctx, dnetw.NetworkID, types.NetworkInspectOptions{
 			Scope:   "",
 			Verbose: false,
 		})
@@ -299,22 +272,30 @@ func (container *Container) run(c *types.Container, environment *configuration.E
 
 	if container.Static.NetworkMode != "host" {
 		agent := Existing("smr-agent")
-		agent.Get()
 
-		if agent != nil {
+		var agentContainer *types.Container
+		agentContainer, err = agent.Get()
+
+		if err != nil {
+			return nil, err
+		}
+
+		if agentContainer != nil {
 			networks := container.GetNetworkInfoTS()
+
 			for _, nid := range networks {
 				if !container.FindNetworkAlias(static.SMR_ENDPOINT_NAME, nid.NetworkId) {
 					err = container.ConnectToTheSameNetwork(agent.Runtime.Id, nid.NetworkId)
 					if err != nil {
 						container.Stop()
 						container.Delete()
+
 						return c, err
 					}
 				}
 
-				dnsCache.AddARecord(container.GetDomain(), networks[nid.NetworkId].IP)
-				dnsCache.AddARecord(container.GetHeadlessDomain(), networks[nid.NetworkId].IP)
+				dnsCache.AddARecord(container.GetDomain(nid.NetworkName), networks[nid.NetworkId].IP)
+				dnsCache.AddARecord(container.GetHeadlessDomain(nid.NetworkName), networks[nid.NetworkId].IP)
 			}
 
 			agentNetworks := agent.GetNetworkInfoTS()
@@ -443,7 +424,7 @@ func (container *Container) Stop() bool {
 		}
 		defer cli.Close()
 
-		duration := time.Second * 30
+		duration := time.Second * 10
 		err = cli.ContainerStop(ctx, container.Runtime.Id, &duration)
 
 		if err != nil {

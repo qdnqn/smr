@@ -7,8 +7,6 @@ import (
 	"github.com/simplecontainer/smr/implementations/container/status"
 	"github.com/simplecontainer/smr/implementations/hub/hub"
 	"github.com/simplecontainer/smr/pkg/helpers"
-	"github.com/simplecontainer/smr/pkg/logger"
-	"go.uber.org/zap"
 )
 
 func ListenEvents(shared *shared.Shared, e chan *hub.Event) {
@@ -22,6 +20,13 @@ func ListenEvents(shared *shared.Shared, e chan *hub.Event) {
 
 func Event(shared *shared.Shared, event *hub.Event) {
 	var container *container.Container
+
+	fmt.Println(event)
+
+	if event == nil {
+		fmt.Println("nil event")
+		return
+	}
 
 	// handle container events
 	if helpers.Contains([]string{"Container"}, event.Kind) {
@@ -62,14 +67,12 @@ func HandleChange(shared *shared.Shared, containerObj *container.Container) {
 	val, exists := containerObj.Static.Labels["reconcile"]
 	if exists {
 		if val == "false" {
-			logger.Log.Info("reconcile label set to false for the container, skipping reconcile", zap.String("container", containerObj.Static.GeneratedName))
 			reconcile = false
 		}
 	}
 
-	if !containerObj.Status.IfStateIs(status.STATUS_RECONCILING) && reconcile {
-		logger.Log.Info(fmt.Sprintf("sending event to queue for solving for container %s", containerObj.Static.GeneratedName))
-		containerObj.Status.TransitionState(containerObj.Static.GeneratedName, status.STATUS_CREATED)
+	if reconcile {
+		containerObj.Status.TransitionState(containerObj.Static.GeneratedName, status.STATUS_PREPARE)
 		shared.Watcher.Find(containerObj.GetGroupIdentifier()).ContainerQueue <- containerObj
 	}
 }

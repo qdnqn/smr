@@ -8,8 +8,11 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"github.com/simplecontainer/smr/pkg/configuration"
 	"github.com/simplecontainer/smr/pkg/keys"
+	"github.com/simplecontainer/smr/pkg/static"
 	"log"
 	"math/big"
 	"net"
@@ -99,6 +102,12 @@ func generateCertPrivKeyPair(keys *keys.Keys, config *configuration.Configuratio
 
 	SubjectKeyIdentifier := sha1.Sum(pubKeyBytes)
 
+	ip := net.ParseIP(config.ExternalIP)
+
+	if ip == nil {
+		return nil, nil, errors.New("invalid external IP provided")
+	}
+
 	cert := &x509.Certificate{
 		SerialNumber: generateSerialNumber(keys),
 		Subject: pkix.Name{
@@ -109,8 +118,8 @@ func generateCertPrivKeyPair(keys *keys.Keys, config *configuration.Configuratio
 			StreetAddress: []string{"BB"},
 			PostalCode:    []string{"75270"},
 		},
-		DNSNames:     []string{config.Flags.DaemonDomain, "localhost", "smr-agent.docker.private"},
-		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		DNSNames:     []string{config.Domain, fmt.Sprintf("smr-agent.%s", static.SMR_LOCAL_DOMAIN)},
+		IPAddresses:  []net.IP{ip, net.IPv6loopback},
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().AddDate(10, 0, 0),
 		SubjectKeyId: SubjectKeyIdentifier[:],

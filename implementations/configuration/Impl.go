@@ -72,7 +72,7 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 
 	var format *f.Format
 
-	format = f.New("configuration", config.Meta.Group, config.Meta.Identifier, "object")
+	format = f.New("configuration", config.Meta.Group, config.Meta.Name, "object")
 	obj := objects.New(implementation.Shared.Client)
 	err = obj.Find(format)
 
@@ -91,10 +91,10 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 
 	if obj.ChangeDetected() || !obj.Exists() {
 		for key, _ := range config.Spec.Data {
-			format = f.New("configuration", config.Meta.Group, config.Meta.Identifier, key)
+			format = f.New("configuration", config.Meta.Group, config.Meta.Name, key)
 
 			if format.Identifier != "*" {
-				format.Identifier = fmt.Sprintf("%s-%s", implementation.Shared.Manager.Config.Environment.PROJECT, config.Meta.Identifier)
+				format.Identifier = fmt.Sprintf("%s-%s", implementation.Shared.Manager.Config.Environment.PROJECT, config.Meta.Name)
 			}
 		}
 
@@ -104,7 +104,7 @@ func (implementation *Implementation) Apply(jsonData []byte) (httpcontract.Respo
 		sharedHub.Event <- &hub.Event{
 			Kind:       KIND,
 			Group:      config.Meta.Group,
-			Identifier: config.Meta.Identifier,
+			Identifier: config.Meta.Name,
 			Data:       nil,
 		}
 	} else {
@@ -149,7 +149,7 @@ func (implementation *Implementation) Compare(jsonData []byte) (httpcontract.Res
 
 	var format *f.Format
 
-	format = f.New("configuration", config.Meta.Group, config.Meta.Identifier, "object")
+	format = f.New("configuration", config.Meta.Group, config.Meta.Name, "object")
 	obj := objects.New(implementation.Shared.Client)
 	err = obj.Find(format)
 
@@ -208,7 +208,7 @@ func (implementation *Implementation) Delete(jsonData []byte) (httpcontract.Resp
 
 	mapstructure.Decode(data["configuration"], &config)
 
-	format := f.New("configuration", config.Meta.Group, config.Meta.Identifier, "object")
+	format := f.New("configuration", config.Meta.Group, config.Meta.Name, "object")
 
 	obj := objects.New(implementation.Shared.Client)
 	err = obj.Find(format)
@@ -217,7 +217,7 @@ func (implementation *Implementation) Delete(jsonData []byte) (httpcontract.Resp
 		deleted, err := obj.Remove(format)
 
 		if deleted {
-			format = f.New("configuration", config.Meta.Group, config.Meta.Identifier, "")
+			format = f.New("configuration", config.Meta.Group, config.Meta.Name, "")
 			deleted, err = obj.Remove(format)
 
 			return httpcontract.ResponseImplementation{

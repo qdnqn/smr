@@ -66,10 +66,14 @@ func ReconcileContainer(shared *shared.Shared, containers *watcher.Containers) {
 	containers.Syncing = true
 
 	for _, definition := range containers.Definition.Spec {
-		definitionString, _ := definition.ToJsonString()
+		definitionString, err := definition.ToJsonString()
 
-		pl := plugins.GetPlugin(shared.Manager.Config.Root, "container.so")
-		pl.Apply([]byte(definitionString))
+		if err != nil {
+			containers.Logger.Info(err.Error())
+		} else {
+			pl := plugins.GetPlugin(shared.Manager.Config.Root, "container.so")
+			pl.Apply([]byte(definitionString))
+		}
 	}
 
 	containers.Syncing = false

@@ -2,8 +2,10 @@ package dns
 
 import (
 	"errors"
+	"fmt"
 	"github.com/go-playground/assert/v2"
 	"github.com/miekg/dns"
+	"github.com/simplecontainer/smr/pkg/static"
 	"net"
 	"strings"
 	"testing"
@@ -33,7 +35,7 @@ func TestAddARecord(t *testing.T) {
 				response: []string{"10.0.0.2"},
 			},
 			Parameters{
-				domain: "mysql.mysql-mysql-1.docker.private",
+				domain: fmt.Sprintf("mysql.mysql-mysql-1.%s", static.SMR_LOCAL_DOMAIN),
 				ip:     "10.0.0.2",
 			},
 		},
@@ -78,7 +80,7 @@ func TestRemoveARecord(t *testing.T) {
 				error: nil,
 			},
 			Parameters{
-				domain: "mysql.mysql-mysql-1.docker.private",
+				domain: fmt.Sprintf("mysql.mysql-mysql-1.%s", static.SMR_LOCAL_DOMAIN),
 				ip:     "10.0.0.2",
 				ip2:    "10.0.0.3",
 			},
@@ -88,10 +90,10 @@ func TestRemoveARecord(t *testing.T) {
 			func() {
 			},
 			Wanted{
-				error: errors.New("ip 10.0.0.2 not found for specifed domain mysql.mysql-mysql-1.docker.private"),
+				error: errors.New(fmt.Sprintf("ip 10.0.0.2 not found for specifed domain mysql.mysql-mysql-1.%s", static.SMR_LOCAL_DOMAIN)),
 			},
 			Parameters{
-				domain: "mysql.mysql-mysql-1.docker.private",
+				domain: fmt.Sprintf("mysql.mysql-mysql-1.%s", static.SMR_LOCAL_DOMAIN),
 				ip:     "10.0.0.2",
 				ip2:    "10.0.0.3",
 			},
@@ -145,7 +147,7 @@ func TestParseQuery(t *testing.T) {
 			Parameters{
 				cache:  &Records{},
 				msg:    &dns.Msg{},
-				domain: "mysql.mysql-mysql-1.docker.private",
+				domain: fmt.Sprintf("mysql.mysql-mysql-1.%s", static.SMR_LOCAL_DOMAIN),
 				ip:     "10.0.0.2",
 			},
 		},
