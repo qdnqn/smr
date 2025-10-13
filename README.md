@@ -272,7 +272,7 @@ dependencies:
     name: "*" # Wildcard to wait for all replicas
 ```
 
-O
+Or
 
 ```yaml
 dependencies:
