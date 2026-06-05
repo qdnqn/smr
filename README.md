@@ -11,7 +11,7 @@
 
 
 ```cgo
-curl -sL https://smrmgr.simplecontainer.io/ -o smrmgr
+curl -sL https://raw.githubusercontent.com/simplecontainer/smr/refs/heads/main/scripts/production/smrmgr.sh -o smrmgr
 chmod +x smrmgr
 sudo mv smrmgr /usr/local/bin
 sudo smrmgr install
@@ -54,7 +54,7 @@ It provides enterprise-grade features like overlay networking, secrets managemen
 1. **Download and install tooling(smrmgr.sh, smr, and smrctl):**
 
 ```bash
-curl -sL https://smrmgr.simplecontainer.io/ -o smrmgr
+curl -sL https://raw.githubusercontent.com/simplecontainer/smr/refs/heads/main/scripts/production/smrmgr.sh -o smrmgr
 chmod +x smrmgr
 sudo mv smrmgr /usr/local/bin
 sudo smrmgr install
@@ -373,13 +373,8 @@ smrctl ps
 
 ## Resources
 
-- **Managed infrastructure**: [app.simplecontainer.io](https://app.simplecontainer.io)
-- **Dashboard**: [github.com/simplecontainer/dashboard](https://github.com/simplecontainer/dashboard)
 - **Documentation**: [docs.simplecontainer.io](https://docs.simplecontainer.io)
-- **Blog**: [blog.simplecontainer.io](https://blog.simplecontainer.io)
 - **Container Registry**: [quay.io/repository/simplecontainer/smr](https://quay.io/repository/simplecontainer/smr)
-- **Source Code**: [github.com/simplecontainer/smr](https://github.com/simplecontainer/smr)
-- **Dashboard**: [github.com/simplecontainer/smr](https://github.com/simplecontainer/dashboard)
 - **Examples**: [github.com/simplecontainer/examples](https://github.com/simplecontainer/examples)
 
 ## Contributing
